@@ -1,10 +1,11 @@
 ---
-name: cad-archive-checker
+name: xh-cad-checker
 description: This skill should be used when auditing CAD archive completeness for a SolidWorks (or similar CAD) project directory — checking which engineering drawings are missing their derived deliverables (STEP/STP, PDF, DWG), detecting drawings that exist without a 3D source, parsing part-number structure into A(assy/component) / B(process type) / C(serial) to find numbering gaps and duplicate part numbers, and producing an HTML report. Triggers include requests like "检查工程图归档缺什么", "哪些图缺 stp/pdf/dwg", "钣金件机加工件排到哪了", "查图号断号/重号", "出一份归档完整性报告".
+description_zh: 【私有】CAD 归档完整性检查：只读扫描目录，检测 sldprt/sldasm+slddrw+step/pdf/dwg 格式齐套、仅有工程图无3D源、图样编号(A部件/B加工/C流水号)断号与重号，输出 HTML 报告。
 agent_created: true
 ---
 
-# CAD 归档完整性检查 (cad-archive-checker)
+# CAD 归档完整性检查 (xh-cad-checker)
 
 ## Overview
 

@@ -1,0 +1,13 @@
+# OS / 编辑器垃圾文件
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+*~
+
+# Python
+__pycache__/
+*.pyc
+
+# WorkBuddy 本地缓存
+.workbuddy/
