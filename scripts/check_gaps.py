@@ -7,11 +7,11 @@ xh-cad-checker · check_gaps.py
   - sldprt + sldasm 合并为「3D 源」一类
   - stp / step 合并为「STP 导出 3D」一类
   - 检查交付物 slddrw / stp / pdf / dwg 是否齐全
-  - 对「不齐全」的 3D 件分类，判定是否为真缺口：
-        装配体(sldasm)            -> 本不需零件加工图（非缺口）
-        标准件/外购(名称命中)     -> 本不需自制图纸（非缺口）
-        自制件(带项目代号)        -> 本应按编号出图（真缺口）
-        待确认                    -> 需人工判断
+  - 对「不齐全」的 3D 件，按【名字】判定是否为真缺口（不是看固定前缀）：
+        带 钣金/机加工 标记 或 编号 B=01(钣金)/B=02(机加工) -> 自制加工件，缺失即真缺口
+        装配体(sldasm 或名字像 装配/台/线/组件)            -> 本不需零件加工图（非缺口）
+        名字能读出参数(尺寸类)或含标准件词汇(垫圈/型材/TXCJ…) -> 标准件/外购（非缺口）
+        以上都不沾边                                      -> 待确认（人工判断）
 
 用法：
   python check_gaps.py --dir "D:/工作资料/智能实验仓/03 皮带线" --out report.html
@@ -25,30 +25,42 @@ CLASS_MAP = {"sldprt": "3D源", "sldasm": "3D源", "slddrw": "工程图",
 DEL = ["工程图", "STP", "PDF", "DWG"]
 SOURCE = "3D源"
 
-# 强标准件信号（即便带项目代号也视为外购，如 XH...TXCJ 铝型材）
-STRONG = ["TXCJ", "型材", "铝型材", "同步带", "皮带", "传送带",
-          "硅胶", "海绵", "PE板", "笼盒"]
-# 一般标准件/外购关键词
-STD = ["垫圈", "套筒", "同步带", "皮带", "铝型材", "TXCJ", "硅胶", "海绵", "PE板",
-       "光轴", "笼盒", "轴承", "螺栓", "螺钉", "螺母", "销", "键", "法兰", "弹簧",
-       "电机", "气缸", "传感器", "链条", "齿轮", "导轨", "滑块", "型材", "滚筒", "辊",
-       "密封圈", "o型", "o形", "卡簧", "管", "接头", "同步轮", "张紧"]
+# 自制加工件标记（带这些 = 应按编号出图，缺失即真缺口）
+FAB = ["钣金", "机加工", "机加", "焊接", "冲压", "cnc", "加工"]
+# 装配体名称暗示（仅强信号；sldasm 文件类型本身即装配体）
+ASSEMBLY_KW = ["装配", "总成", "组件", "机构", "模块", "工作站"]
+# 标准件/外购 名称词汇（从名字即可知参数或品类）
+STD_VOCAB = ["垫圈", "套筒", "同步带", "皮带", "传送带", "型材", "铝型材", "TXCJ", "硅胶",
+             "海绵", "PE板", "笼盒", "轴承", "螺栓", "螺钉", "螺母", "销", "键", "法兰",
+             "弹簧", "电机", "气缸", "传感器", "链条", "齿轮", "导轨", "滑块", "辊",
+             "密封圈", "o型", "o形", "卡簧", "管", "接头", "光轴", "滚筒", "同步轮", "张紧"]
 
 
 def classify(base, is_asm, proj):
+    # 1) 自制加工件（应出图）：钣金/机加工 标记，或编号 B=01(钣金)/02(机加工)
+    low = base.lower()
+    for k in FAB:
+        if k.lower() in low:
+            return "自制件(应出图)"
+    pref = re.escape(proj) if proj else r"XH\d+"
+    if re.search(rf"{pref}\.\d{{2}}\.(0[12])-", base):
+        return "自制件(应出图)"
+    # 2) 装配体
     if is_asm:
         return "装配体"
-    for k in STRONG:                      # 先认强标准信号
+    for k in ASSEMBLY_KW:
+        if k in base:
+            return "装配体"
+    # 3) 标准件/外购：名字直接带尺寸参数 -> 可读数即标准件
+    if re.search(r"\d+\s*[xX×]\s*\d+", base) or re.search(r"\d+\s*-\s*\d+", base) \
+       or re.search(r"外径|内径|直径|Φ|phi", base, re.I) \
+       or re.search(r"\d+(\.\d+)?\s*mm", base, re.I):
+        return "标准件/外购"
+    # 4) 标准词汇
+    for k in STD_VOCAB:
         if k in base:
             return "标准件/外购"
-    if proj and proj in base:             # 再判项目代号（自制件）
-        return "自制件(应出图)"
-    low = base.lower()
-    for k in STD:
-        if k.rstrip("?") in base or k.rstrip("?") in low:
-            return "标准件/外购"
-    if re.search(r"\d+x\d+", base):       # 尺寸件，如 10x240轴
-        return "标准件/外购"
+    # 5) 待确认
     return "待确认"
 
 
@@ -199,7 +211,7 @@ td.miss{{color:#b91c1c}}
   <div class="card"><div class="n">{total_src}</div><div class="l">3D 源件数</div></div>
   <div class="card"><div class="n" style="color:#16a34a">{complete}</div><div class="l">四项齐全</div></div>
   <div class="card"><div class="n">{total_src-complete}</div><div class="l">不齐全</div></div>
-  <div class="card bad"><div class="n">{real_gap}</div><div class="l">真缺口<br>(自制件+待确认)</div></div>
+  <div class="card bad"><div class="n">{real_gap}</div><div class="l">需关注<br>(应出图+待确认)</div></div>
 </div>
 
 <div class="callout"><b>哪个类交付物缺得最多？</b><br>
