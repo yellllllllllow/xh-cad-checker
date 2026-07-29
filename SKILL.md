@@ -1,7 +1,7 @@
 ---
 name: xh-cad-checker
 description: This skill should be used when auditing CAD archive completeness for a SolidWorks (or similar CAD) project directory — checking which engineering drawings are missing their derived deliverables (STEP/STP, PDF, DWG), detecting drawings that exist without a 3D source, parsing part-number structure into A(assy/component) / B(process type) / C(serial) to find numbering gaps and duplicate part numbers, and producing an HTML report. Triggers include requests like "检查工程图归档缺什么", "哪些图缺 stp/pdf/dwg", "钣金件机加工件排到哪了", "查图号断号/重号", "出一份归档完整性报告".
-description_zh: 【私有】CAD 归档完整性检查：只读扫描目录，检测 sldprt/sldasm+slddrw+step/pdf/dwg 格式齐套、仅有工程图无3D源、图样编号(A部件/B加工/C流水号)断号与重号，输出 HTML 报告。
+description_zh: 【私有】CAD 归档完整性检查：只读扫描目录，检测 sldprt/sldasm+slddrw+step/pdf/dwg 格式齐套、仅有工程图无3D源、图样编号(A部件/B加工/C流水号)断号与重号；并提供 check_gaps.py 把 sldprt/sldasm 合并为 3D 源、按装配体/标准件/自制件分类判定「缺失项是否真缺口」，输出 HTML 报告。
 agent_created: true
 ---
 
@@ -36,6 +36,25 @@ python scripts/check_archive.py --dir <目录> --no-abcc
 ```
 
 > 运行环境：使用受管 Python（如 `C:/Users/H/.workbuddy/binaries/python/versions/3.13.12/python.exe`）。脚本仅依赖标准库，无第三方依赖。
+
+## 简化模型：3D 源齐套 + 真缺口判定（check_gaps.py）
+
+`check_archive.py` 做完整的五件齐套 + A/B/C 编号解析；若只想快速判断「缺的文件是不是真缺口」，用 `check_gaps.py`：
+
+- 把 `sldprt` + `sldasm` 合并为「3D 源」一类，`stp/step` 合并为「STP 导出 3D」；
+- 检查 `slddrw / stp / pdf / dwg` 四项交付物是否齐全；
+- 对**不齐全**的 3D 件分类，判定是否为真缺口：
+  - 装配体（`sldasm`）→ 本不需零件加工图（非缺口）
+  - 标准件/外购（名称命中 TXCJ/型材/垫圈/同步带/PE板/传送带… 或未带项目代号）→ 本不需自制图纸（非缺口）
+  - 自制件（含项目代号如 `XH042601`，按编号规则 B=01 钣金 / B=02 机加工应出图）→ **真缺口**
+  - 待确认 → 需人工判断
+- 仅顶层目录（默认），`--recursive` 可递归。连续两次扫描对比可验证「缺失件=装配体/标准件」假设是否成立。
+
+```bash
+# 3D 源齐套 + 真缺口判定（报告默认写到当前目录 xh_cad_gap_report.html）
+python scripts/check_gaps.py --dir "D:/工作资料/智能实验仓/03 皮带线"
+python scripts/check_gaps.py --dir <目录> --out report.html --proj XH042601
+```
 
 ## What the report contains
 

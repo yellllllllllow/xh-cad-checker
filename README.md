@@ -15,6 +15,7 @@
 | 格式齐套性 | 缺 `.slddrw` 工程图 / `.step` 3D 中性格式 / `.pdf` 图纸 / `.dwg` CAD 图纸 |
 | 异常检测 | 仅有工程图（`.slddrw`）却找不到 3D 源（`.sldprt` / `.sldasm`）——源文件可能漏存、改名或移动 |
 | 编号解析 | 按 `<前缀>.<A 部件>.<B 加工类型>-<C 流水号>` 解析，输出 A×B 矩阵、断号段、重号清单 |
+| 真缺口判定（check_gaps.py） | 把 `sldprt/sldasm` 合并为 3D 源，对缺交付物的件按装配体 / 标准件 / 自制件分类，直接给出「缺失=真缺口 or 本不需出图」结论 |
 | 锁文件忽略 | 自动跳过 SolidWorks 锁文件 `~$*`，避免误判 |
 | 只读安全 | 全程不修改、不删除、不重命名源目录，只生成一份报告 |
 
@@ -66,6 +67,33 @@ python scripts/check_archive.py --dir <目录> --no-abcc
 
 > 环境：Python 3，脚本仅依赖标准库，无需 `pip install`。
 
+### 简化模型：3D 源齐套 + 真缺口判定（check_gaps.py）
+
+`check_archive.py` 偏完整（五件齐套 + A/B/C 编号解析）；若只想快速判断「缺的文件是不是真缺口」，用 `check_gaps.py`：
+
+```bash
+# 3D 源齐套 + 真缺口判定（报告默认写到当前目录 xh_cad_gap_report.html）
+python scripts/check_gaps.py --dir "D:/工作资料/智能实验仓/03 皮带线"
+
+# 指定输出、标注项目代号前缀
+python scripts/check_gaps.py --dir <目录> --out report.html --proj XH042601
+
+# 递归子目录
+python scripts/check_gaps.py --dir <目录> --recursive
+```
+
+`check_gaps.py` 的逻辑：
+
+- `sldprt` + `sldasm` → 合并为「3D 源」一类；`stp` / `step` → 「STP 导出 3D」一类；
+- 检查 `slddrw / stp / pdf / dwg` 四项交付物是否齐全；
+- 对**不齐全**的 3D 件分类判定：
+  - **装配体**（`sldasm`）→ 本不需零件加工图（非缺口）
+  - **标准件 / 外购**（名称命中 TXCJ / 型材 / 垫圈 / 同步带 / PE板 / 传送带…，或未带项目代号）→ 本不需自制图纸（非缺口）
+  - **自制件**（含项目代号如 `XH042601`，按编号规则 B=01 钣金 / B=02 机加工应出图）→ **真缺口**
+  - **待确认** → 需人工判断
+- 报告直接给出「真缺口数量」与结论（如「逻辑完全成立 ✅：所有不齐全件均为装配体或标准件，无真缺口」）。
+- 仅顶层目录（默认），`--recursive` 可递归。连续两次扫描对比可验证「缺失件 = 装配体 / 标准件」假设。
+
 ---
 
 ## 四、图样编号规则
@@ -111,7 +139,8 @@ xh-cad-checker/
 ├── SKILL.md                 # 技能定义（WorkBuddy 加载入口）
 ├── README.md                # 本文档
 ├── scripts/
-│   └── check_archive.py     # 核心检查脚本（纯标准库，只读扫描）
+│   ├── check_archive.py     # 完整检查：五件齐套 + A/B/C 编号解析（纯标准库，只读）
+│   └── check_gaps.py        # 简化模型：3D 源齐套 + 真缺口判定（装配体/标准件/自制件分类）
 └── references/
     └── coding_rules.md      # 图样编号规则与 A/B 映射表
 ```
