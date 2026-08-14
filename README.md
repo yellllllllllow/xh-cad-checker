@@ -1,6 +1,6 @@
 # xh-cad-checker
 
-> 【私有】WorkBuddy 用户级技能 —— CAD（SolidWorks）归档完整性检查工具。
+> WorkBuddy 用户级技能 —— CAD（SolidWorks）归档完整性检查工具。
 
 对某个 CAD 项目目录做**只读**归档体检：扫描所有文件，按图号（无扩展名基础名）交叉比对，
 找出缺失的派生交付物（`.slddrw` / `.step` / `.pdf` / `.dwg`），识别「仅有工程图却无 3D 源」的异常，
@@ -94,6 +94,40 @@ python scripts/check_gaps.py --dir <目录> --recursive
 - 报告直接给出「真缺口数量」与结论（如「逻辑完全成立 ✅：所有不齐全件均为装配体或标准件，无真缺口」）。
 - 仅顶层目录（默认），`--recursive` 可递归。连续两次扫描对比可验证「缺失件 = 装配体 / 标准件」假设。
 
+### 删除孤儿图（delete_orphan_drawings.py）
+
+找出「仅有 `.slddrw` 工程图、没有对应 `.sldprt`/`.sldasm` 3D 源」的孤儿图并删除。**删除必须确认**：默认只读演习（只打印待删清单），加 `--apply` 才真正删除；`--apply` 前先整批备份、再逐一移入回收站（可找回），仅作用于 `--dir`。
+
+```bash
+# 只读演习：列出将要删除的孤儿图（不改动任何文件）
+python scripts/delete_orphan_drawings.py --dir "D:/工作资料/智能实验仓/03 皮带线"
+
+# 确认后删除（先备份到 ./orphan_backup_<时间戳>，再移入回收站）
+python scripts/delete_orphan_drawings.py --dir <目录> --apply
+
+# 指定备份位置 / 递归
+python scripts/delete_orphan_drawings.py --dir <目录> --apply --backup-dir D:/bak
+python scripts/delete_orphan_drawings.py --dir <目录> --recursive
+```
+
+- **真·孤儿图（删除）**：图号核心编码在 3D 源中完全找不到（含无图号件）。
+- **命名未同步（保留）**：同核心编码的 3D 源存在，只是图名与件名差一个字/后缀 → 不删，建议改名对齐。
+
+### 序号矩阵表（serial_matrix.py）
+
+把一个层级从最小号到最大号逐行列出，每格 `序号 | 完整文件名(带扩展名) | 状态(有/缺)`，绿=有红=缺，便于一眼看出缺号/重号。
+
+```bash
+# 生成序号矩阵表（HTML，标准库零依赖）
+python scripts/serial_matrix.py --dir "D:/工作资料/智能实验仓/03 皮带线"
+
+# 同时生成 XLSX（需 openpyxl；未安装则仅出 HTML 并提示）
+python scripts/serial_matrix.py --dir <目录> --out matrix.html --xlsx matrix.xlsx
+
+# 每行 4 单元 = 12 列（调整密度）
+python scripts/serial_matrix.py --dir <目录> --recursive --units 4
+```
+
 ---
 
 ## 四、图样编号规则
@@ -128,7 +162,7 @@ python scripts/check_gaps.py --dir <目录> --recursive
 - 子装配多级流水号（如 `…-001-002`）按父 / 子关系处理，**不会**误判为重号。
 - 总装配（如 `03-01 升降交接台`）、未编号外购件（如 `TXCJ-H6-2040-L815`）归入「未识别」，完整性检查仍照常统计其缺格式情况。
 - 报告默认写到 `--dir` 下；为避免污染项目归档目录，可用 `--out` 指定到临时 / 工作区路径。
-- 本仓库为**私有**，仅供个人使用，请勿对外分享或转公开。
+- `delete_orphan_drawings.py` 会真正删除文件，**默认只读演习**，必须 `--apply` 才执行；执行前自动整批备份、并移入回收站（非永久删除），可随时找回。
 
 ---
 
@@ -139,8 +173,10 @@ xh-cad-checker/
 ├── SKILL.md                 # 技能定义（WorkBuddy 加载入口）
 ├── README.md                # 本文档
 ├── scripts/
-│   ├── check_archive.py     # 完整检查：五件齐套 + A/B/C 编号解析（纯标准库，只读）
-│   └── check_gaps.py        # 简化模型：3D 源齐套 + 真缺口判定（装配体/标准件/自制件分类）
+│   ├── check_archive.py              # 完整检查：五件齐套 + A/B/C 编号解析（纯标准库，只读）
+│   ├── check_gaps.py                 # 简化模型：3D 源齐套 + 真缺口判定（装配体/标准件/自制件分类）
+│   ├── delete_orphan_drawings.py     # 删除「仅有.slddrw 无3D源」的孤儿图（默认演习，--apply 才删：备份+回收站）
+│   └── serial_matrix.py              # 生成序号矩阵表（序号|完整文件名|状态，有/缺）；HTML 零依赖，XLSX 需 openpyxl
 └── references/
     └── coding_rules.md      # 图样编号规则与 A/B 映射表
 ```

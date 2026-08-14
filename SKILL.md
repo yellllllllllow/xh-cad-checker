@@ -1,7 +1,7 @@
 ---
 name: xh-cad-checker
-description: This skill should be used when auditing CAD archive completeness for a SolidWorks (or similar CAD) project directory — checking which engineering drawings are missing their derived deliverables (STEP/STP, PDF, DWG), detecting drawings that exist without a 3D source, parsing part-number structure into A(assy/component) / B(process type) / C(serial) to find numbering gaps and duplicate part numbers, and producing an HTML report. Triggers include requests like "检查工程图归档缺什么", "哪些图缺 stp/pdf/dwg", "钣金件机加工件排到哪了", "查图号断号/重号", "出一份归档完整性报告".
-description_zh: CAD 归档完整性检查：只读扫描目录，检测 sldprt/sldasm+slddrw+step/pdf/dwg 格式齐套、仅有工程图无3D源、图样编号(A部件/B加工/C流水号)断号与重号；并提供 check_gaps.py 把 sldprt/sldasm 合并为 3D 源、按装配体/标准件/自制件分类判定「缺失项是否真缺口」，输出 HTML 报告。
+description: This skill audits CAD archive completeness for a SolidWorks (or similar CAD) project directory — checking which engineering drawings are missing derived deliverables (STEP/STP, PDF, DWG), detecting drawings that exist without a 3D source, parsing part-number structure into A(assy/component) / B(process type) / C(serial) to find numbering gaps and duplicate part numbers, and producing an HTML report. It can also DELETE orphan drawings (only .slddrw with no .sldprt/.sldasm source; requires explicit --apply confirmation, backs up + recycles to Recycle Bin) and generate a serial-number MATRIX table (序号 | full filename | status, has/missing). Triggers: "检查工程图归档缺什么", "哪些图缺 stp/pdf/dwg", "查图号断号/重号", "删除只有工程图没有3D源的文件", "把孤儿图删掉", "出序号矩阵表", "哪些序号缺/列出有和缺的序号".
+description_zh: CAD 归档完整性检查：只读扫描目录，检测 sldprt/sldasm+slddrw+step/pdf/dwg 格式齐套、仅有工程图无3D源、图样编号(A部件/B加工/C流水号)断号与重号；并提供 check_gaps.py 把 sldprt/sldasm 合并为 3D 源、按装配体/标准件/自制件分类判定「缺失项是否真缺口」。另提供 delete_orphan_drawings.py 删除「仅有.slddrw 无3D源」的孤儿图（默认只读演习，必须 --apply 才删除：先备份再移入回收站，可找回），以及 serial_matrix.py 生成序号矩阵表（序号|完整文件名|状态，有/缺一目了然）。
 agent_created: true
 ---
 
@@ -55,6 +55,39 @@ python scripts/check_archive.py --dir <目录> --no-abcc
 python scripts/check_gaps.py --dir "D:/工作资料/智能实验仓/03 皮带线"
 python scripts/check_gaps.py --dir <目录> --out report.html --proj XH042601
 ```
+
+## 删除孤儿图（delete_orphan_drawings.py）
+
+找出「仅有 `.slddrw` 工程图、没有对应 `.sldprt`/`.sldasm` 3D 源」的孤儿图并删除。
+
+**安全闸门（删除必须确认）**：默认是**只读演习**——只扫描并打印待删清单，不动任何文件。必须显式加 `--apply` 才真正删除；`--apply` 前会先把所有候选**整批备份**到备份目录，再逐一**移入系统回收站**（`FO_ALLOWUNDO`，非永久删除、可找回），最后用存在性校验成败。仅作用于 `--dir`，绝不碰其它位置。
+
+分类：
+- **真·孤儿图（删除候选）**：图号核心编码在 3D 源中完全找不到（含无图号件）。
+- **命名未同步（保留）**：同核心编码的 3D 源存在，只是图名与件名差一个字/后缀 → 不删，建议改名对齐。
+
+```bash
+python scripts/delete_orphan_drawings.py --dir "E:/智能药仓 4.2B/02-01 固定货架"            # 演习(只看不改)
+python scripts/delete_orphan_drawings.py --dir <目录> --apply                              # 确认后删除
+python scripts/delete_orphan_drawings.py --dir <目录> --apply --backup-dir D:/bak          # 指定备份位置
+python scripts/delete_orphan_drawings.py --dir <目录> --recursive                          # 递归子目录
+```
+
+> 路径统一规范为反斜杠再调用回收站 API（修复 `/` 与 `\` 混用导致 `SHFileOperation` 误报的坑）。删除后建议关闭 SolidWorks 重扫一次确认数字稳定。
+
+## 序号矩阵表（serial_matrix.py）
+
+把一个层级从最小号到最大号逐行列出，每格显示 `序号 | 完整文件名(带扩展名) | 状态(有/缺)`，绿=有、红=缺，按层级分段，便于一眼看出哪个号缺文件、哪个号重号/变体。
+
+```bash
+python scripts/serial_matrix.py --dir "E:/智能药仓 4.2B/02-01 固定货架"
+python scripts/serial_matrix.py --dir <目录> --out matrix.html --xlsx matrix.xlsx
+python scripts/serial_matrix.py --dir <目录> --recursive --units 4        # 每行4单元=12列
+```
+
+- HTML 始终生成（**标准库，零依赖**）；XLSX 在检测到 `openpyxl` 时一并生成，否则提示 `pip install openpyxl` 并仅出 HTML。
+- `--units` 控制每行单元数（默认 3 = 9 列，贴「10 列」密度）；每个单元固定 3 列：序号 / 完整文件名 / 状态。
+- 全程只读，仅反映当前真实状态（不标记历史删除）。
 
 ## What the report contains
 
