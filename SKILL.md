@@ -1,7 +1,7 @@
 ---
 name: xh-cad-checker
 description: This skill audits CAD archive completeness for a SolidWorks (or similar CAD) project directory — checking which engineering drawings are missing derived deliverables (STEP/STP, PDF, DWG), detecting drawings that exist without a 3D source, parsing part-number structure into A(assy/component) / B(process type) / C(serial) to find numbering gaps and duplicate part numbers, and producing an HTML report. It can also DELETE orphan drawings (only .slddrw with no .sldprt/.sldasm source; requires explicit --apply confirmation, backs up + recycles to Recycle Bin) and generate a serial-number MATRIX table (序号 | full filename | status, has/missing). Triggers: "检查工程图归档缺什么", "哪些图缺 stp/pdf/dwg", "查图号断号/重号", "删除只有工程图没有3D源的文件", "把孤儿图删掉", "出序号矩阵表", "哪些序号缺/列出有和缺的序号".
-description_zh: CAD 归档完整性检查：只读扫描目录，检测 sldprt/sldasm+slddrw+step/pdf/dwg 格式齐套、仅有工程图无3D源、图样编号(A部件/B加工/C流水号)断号与重号；并提供 check_gaps.py 把 sldprt/sldasm 合并为 3D 源、按装配体/标准件/自制件分类判定「缺失项是否真缺口」。另提供 delete_orphan_drawings.py 删除「仅有.slddrw 无3D源」的孤儿图（默认只读演习，必须 --apply 才删除：先备份再移入回收站，可找回），以及 serial_matrix.py 生成序号矩阵表（序号|完整文件名|状态，有/缺一目了然）。
+description_zh: CAD 归档完整性检查：只读扫描目录，检测 sldprt/sldasm+slddrw+step/pdf/dwg 格式齐套、仅有工程图无3D源、图样编号(A部件/B加工/C流水号)断号与重号；并提供 check_gaps.py 把 sldprt/sldasm 合并为 3D 源、按装配体/标准件/自制件分类判定「缺失项是否真缺口」。另提供 delete_orphan_drawings.py 删除「仅有.slddrw 无3D源」的孤儿图（默认只读演习，必须 --apply 才删除：先备份再移入回收站，可找回），serial_matrix.py 生成序号矩阵表（序号|完整文件名|状态，有/缺一目了然），以及 find_number.py 直接读盘核查某个图号是否存在（不依赖 Windows 索引搜索，递归整棵树，结果权威可复现）。
 agent_created: true
 ---
 
@@ -18,6 +18,7 @@ agent_created: true
 - **只读**：绝不对源目录做任何修改、删除、重命名。仅生成一份报告文件（默认写到目标目录下或用户指定路径）。
 - **锁文件忽略**：自动跳过 SolidWorks 锁文件 `~$*`（SolidWorks 运行时会留下），避免误判。
 - **图号即基础名**：以「文件名去掉扩展名」作为图号键，同一图号的多种格式（prt/asm/drw/step/pdf/dwg）应共存。
+- **直接读盘，禁用 Windows 索引搜索**：所有扫描均用 `os.walk`/`os.scandir` 遍历真实文件系统，绝不依赖资源管理器索引（常漏文件、误把文件大小等当文件名命中）；大范围查某个具体图号用 `scripts/find_number.py`。
 
 ## Quick Start
 
@@ -88,6 +89,29 @@ python scripts/serial_matrix.py --dir <目录> --recursive --units 4        # �
 - HTML 始终生成（**标准库，零依赖**）；XLSX 在检测到 `openpyxl` 时一并生成，否则提示 `pip install openpyxl` 并仅出 HTML。
 - `--units` 控制每行单元数（默认 3 = 9 列，贴「10 列」密度）；每个单元固定 3 列：序号 / 完整文件名 / 状态。
 - 全程只读，仅反映当前真实状态（不标记历史删除）。
+
+## 图号查询：find_number.py（直接读盘，不依赖 Windows 搜索）
+
+核查「某个图号到底存不存在」「某片段在整棵目录树里分布在哪里」——尤其当你怀疑资源管理器搜索结果不准时。脚本用 `os.walk` 直接读盘，结果权威、可复现、不弹窗、不干扰前端。
+
+```bash
+# 查某个 C 流水号（递归整棵树，默认开启递归）
+python scripts/find_number.py --dir "E:/智能药仓 4.2B/02-01 固定货架" --num 023
+
+# 查完整图号（子串匹配，能命中 "XH022501.02.01-305 C1 弹片支架.SLDPRT"）
+python scripts/find_number.py --dir "E:/智能药仓 4.2B" --num "XH022501.02.01-023"
+
+# 仅查顶层 + 要求文件名(去扩展名)完全等于该图号（最严格）
+python scripts/find_number.py --dir "E:/智能药仓 4.2B/02-01 固定货架" --num 023 --no-recursive --exact
+
+# 限定扩展名
+python scripts/find_number.py --dir "E:/智能药仓 4.2B" --num 305 --ext sldprt,slddrw
+```
+
+- `--num` 支持完整图号 / C 流水号 / 任意子串，大小写不敏感；
+- 默认**递归**整棵树；`--no-recursive` 仅查顶层；
+- `--exact` 严格模式：仅当「文件名去掉扩展名」完全等于 `--num` 时命中（适合查无名称的纯编号文件）；
+- 自动跳过 SolidWorks 锁文件 `~$*`，全程只读。
 
 ## What the report contains
 
